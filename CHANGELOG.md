@@ -29,7 +29,7 @@ Making a new release? Simply add the new header with the version and date undern
 ```
 -->
 
-## Unreleased — `rojo-push` fork
+## [7.7.0-push.2] (May 18th, 2026) — `rojo-push` fork
 
 * `rojo plugin install` now detects other Rojo plugin files in Studio's plugins
   folder (anything matching `Rojo*.rbxm` / `Rojo*.rbxmx` besides
@@ -37,6 +37,8 @@ Making a new release? Simply add the new header with the version and date undern
   `--disable-conflicts` to rename the offending files to `<name>.disabled`
   automatically. Resolves the common `Can't parse JSON` error users hit when a
   Marketplace Rojo plugin is installed side-by-side with the fork's plugin.
+
+[7.7.0-push.2]: https://github.com/StephenSHorton/rojo-push/releases/tag/v7.7.0-push.2
 
 ## [7.7.0-push.1] (May 18th, 2026) — `rojo-push` fork
 
