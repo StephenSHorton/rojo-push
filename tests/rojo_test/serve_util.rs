@@ -15,8 +15,8 @@ use tempfile::{tempdir, TempDir};
 
 use librojo::{
     web_api::{
-        ReadResponse, SerializeRequest, SerializeResponse, ServerInfoResponse, SocketPacket,
-        SocketPacketType,
+        ReadResponse, RefreshResponse, SerializeRequest, SerializeResponse, ServerInfoResponse,
+        SocketPacket, SocketPacketType,
     },
     SessionId,
 };
@@ -34,11 +34,20 @@ use crate::rojo_test::io_util::{
 /// The passed in callback is where the actual test body should go. Setup and
 /// cleanup happens automatically.
 pub fn run_serve_test(test_name: &str, callback: impl FnOnce(TestServeSession, RedactionMap)) {
+    run_serve_test_with_options(test_name, TestServeOptions::default(), callback);
+}
+
+/// Like [`run_serve_test`], but allows tuning how `rojo serve` is launched.
+pub fn run_serve_test_with_options(
+    test_name: &str,
+    options: TestServeOptions,
+    callback: impl FnOnce(TestServeSession, RedactionMap),
+) {
     let _ = env_logger::try_init();
 
     let mut redactions = RedactionMap::default();
 
-    let mut session = TestServeSession::new(test_name);
+    let mut session = TestServeSession::new_with_options(test_name, options);
     let info = session.wait_to_come_online();
 
     redactions.intern(info.session_id);
@@ -57,6 +66,13 @@ pub fn run_serve_test(test_name: &str, callback: impl FnOnce(TestServeSession, R
     settings.bind(move || callback(session, redactions));
 }
 
+/// Options that control how the test rojo process is launched.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct TestServeOptions {
+    /// Pass the `--no-watch` flag to `rojo serve`.
+    pub no_watch: bool,
+}
+
 /// Represents a running Rojo serve session running in a temporary directory.
 pub struct TestServeSession {
     // Drop order is important here: we want the process to be killed before the
@@ -69,7 +85,12 @@ pub struct TestServeSession {
 }
 
 impl TestServeSession {
+    #[allow(dead_code)]
     pub fn new(name: &str) -> Self {
+        Self::new_with_options(name, TestServeOptions::default())
+    }
+
+    pub fn new_with_options(name: &str, options: TestServeOptions) -> Self {
         let working_dir = get_working_dir_path();
 
         let source_path = Path::new(SERVE_TESTS_PATH).join(name);
@@ -103,13 +124,18 @@ impl TestServeSession {
         let port = get_port_number();
         let port_string = port.to_string();
 
+        let mut args: Vec<&str> = vec![
+            "serve",
+            project_path.to_str().unwrap(),
+            "--port",
+            port_string.as_str(),
+        ];
+        if options.no_watch {
+            args.push("--no-watch");
+        }
+
         let rojo_process = Command::new(ROJO_PATH)
-            .args([
-                "serve",
-                project_path.to_str().unwrap(),
-                "--port",
-                port_string.as_str(),
-            ])
+            .args(&args)
             .current_dir(working_dir)
             .spawn()
             .expect("Couldn't start Rojo");
@@ -222,6 +248,22 @@ impl TestServeSession {
                 }
             }
         }
+    }
+
+    /// POST /api/refresh — manually trigger a re-snapshot from disk.
+    pub fn post_api_refresh(&self) -> Result<RefreshResponse, Box<dyn std::error::Error>> {
+        let client = reqwest::blocking::Client::new();
+        let url = format!("http://localhost:{}/api/refresh", self.port);
+        let response = client.post(url).send()?;
+        let body = response.bytes()?;
+        let parsed: RefreshResponse = serde_json::from_slice(&body).map_err(|err| {
+            format!(
+                "Server returned malformed JSON from /api/refresh: {}\nBody: {}",
+                err,
+                String::from_utf8_lossy(&body)
+            )
+        })?;
+        Ok(parsed)
     }
 
     pub fn get_api_serialize(

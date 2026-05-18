@@ -29,6 +29,22 @@ Making a new release? Simply add the new header with the version and date undern
 ```
 -->
 
+## Unreleased — `rojo-push` fork
+
+This fork adds a manual-push sync mode for environments where Rojo's filesystem
+watcher is unreliable (Windows junctions, network shares, cross-directory project
+layouts). The default behavior of upstream Rojo is unchanged.
+
+* Added `rojo serve --no-watch` to disable the filesystem watcher entirely.
+* Added `POST /api/refresh` to trigger a manual re-snapshot of the project and
+  push any diff to connected Studio plugins. Returns JSON
+  (`{ sessionId, instancesAdded, instancesRemoved, instancesUpdated, durationMs, errors }`).
+* Added `rojo push [--address] [--port]` subcommand that posts to
+  `/api/refresh` and prints a colored summary.
+* `/api/rojo` now reports `watchEnabled` so tools can detect push-mode servers.
+* The Studio plugin requires no changes: refresh-triggered patches flow through
+  the existing message queue.
+
 ## Unreleased
 
 * `inf` and `nan` values in properties are now synced ([#1176])

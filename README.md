@@ -12,6 +12,14 @@
 
 <hr />
 
+> **Fork note (`rojo-push`):** this fork adds a manual-push sync mode for
+> environments where Rojo's filesystem watcher is unreliable (Windows
+> junctions, network shares, cross-directory project layouts). Run
+> `rojo serve --no-watch` to disable the watcher, then `rojo push` after every
+> build to re-snapshot the project and push the diff to Studio. The Studio
+> plugin needs no changes. See [`CLAUDE.md`](./CLAUDE.md) for the full
+> workflow and architecture notes. Upstream behavior is unchanged.
+
 **Rojo** is a tool designed to enable Roblox developers to use professional-grade software engineering tools.
 
 With Rojo, it's possible to use industry-leading tools like **Visual Studio Code** and **Git**.

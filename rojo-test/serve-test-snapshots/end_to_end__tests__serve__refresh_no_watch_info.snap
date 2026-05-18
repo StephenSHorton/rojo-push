@@ -1,0 +1,15 @@
+---
+source: tests/tests/serve.rs
+assertion_line: 677
+expression: redactions.redacted_yaml(&info)
+---
+expectedPlaceIds: ~
+gameId: ~
+placeId: ~
+projectName: scripts
+protocolVersion: 5
+rootInstanceId: id-2
+serverVersion: "[server-version]"
+sessionId: id-1
+unexpectedPlaceIds: ~
+watchEnabled: false

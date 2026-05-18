@@ -5,6 +5,7 @@ mod doc;
 mod fmt_project;
 mod init;
 mod plugin;
+mod push;
 mod serve;
 mod sourcemap;
 mod syncback;
@@ -20,6 +21,7 @@ pub use self::doc::DocCommand;
 pub use self::fmt_project::FmtProjectCommand;
 pub use self::init::{InitCommand, InitKind};
 pub use self::plugin::{PluginCommand, PluginSubcommand};
+pub use self::push::PushCommand;
 pub use self::serve::ServeCommand;
 pub use self::sourcemap::SourcemapCommand;
 pub use self::syncback::SyncbackCommand;
@@ -42,6 +44,7 @@ impl Options {
         match self.subcommand {
             Subcommand::Init(subcommand) => subcommand.run(),
             Subcommand::Serve(subcommand) => subcommand.run(self.global),
+            Subcommand::Push(subcommand) => subcommand.run(self.global),
             Subcommand::Build(subcommand) => subcommand.run(),
             Subcommand::Upload(subcommand) => subcommand.run(),
             Subcommand::Sourcemap(subcommand) => subcommand.run(),
@@ -116,6 +119,7 @@ pub struct ColorChoiceParseError {
 pub enum Subcommand {
     Init(InitCommand),
     Serve(ServeCommand),
+    Push(PushCommand),
     Build(BuildCommand),
     Upload(UploadCommand),
     Sourcemap(SourcemapCommand),

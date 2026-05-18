@@ -1,7 +1,7 @@
 //! Defines Rojo's HTTP API, all under /api. These endpoints generally return
 //! JSON.
 
-use std::{collections::HashMap, fs, path::PathBuf, str::FromStr, sync::Arc};
+use std::{collections::HashMap, fs, path::PathBuf, str::FromStr, sync::Arc, time::Instant};
 
 use futures::{sink::SinkExt, stream::StreamExt};
 use hyper::{body, Body, Method, Request, Response, StatusCode};
@@ -17,11 +17,11 @@ use crate::{
     snapshot::{InstanceWithMeta, PatchSet, PatchUpdate},
     web::{
         interface::{
-            ErrorResponse, Instance, MessagesPacket, OpenResponse, ReadResponse,
+            ErrorResponse, Instance, MessagesPacket, OpenResponse, ReadResponse, RefreshResponse,
             ServerInfoResponse, SocketPacket, SocketPacketBody, SocketPacketType, SubscribeMessage,
             WriteRequest, WriteResponse, PROTOCOL_VERSION, SERVER_VERSION,
         },
-        util::{deserialize_msgpack, msgpack, msgpack_ok, serialize_msgpack},
+        util::{deserialize_msgpack, json, msgpack, msgpack_ok, serialize_msgpack},
     },
     web_api::{
         InstanceUpdate, RefPatchRequest, RefPatchResponse, SerializeRequest, SerializeResponse,
@@ -50,6 +50,7 @@ pub async fn call(serve_session: Arc<ServeSession>, mut request: Request<Body>) 
         }
         (&Method::POST, "/api/serialize") => service.handle_api_serialize(request).await,
         (&Method::POST, "/api/ref-patch") => service.handle_api_ref_patch(request).await,
+        (&Method::POST, "/api/refresh") => service.handle_api_refresh().await,
 
         (&Method::POST, path) if path.starts_with("/api/open/") => {
             service.handle_api_open(request).await
@@ -87,6 +88,7 @@ impl ApiService {
             place_id: self.serve_session.place_id(),
             game_id: self.serve_session.game_id(),
             root_instance_id,
+            watch_enabled: self.serve_session.watch_enabled(),
         })
     }
 
@@ -344,6 +346,69 @@ impl ApiService {
                 updated: instance_updates.into_values().collect(),
             },
         })
+    }
+
+    /// Re-snapshot the project from disk and push any diff to connected
+    /// plugins. Returns a JSON summary of the patch.
+    ///
+    /// Intended for use with `rojo serve --no-watch`, where filesystem events
+    /// are disabled and updates must be triggered explicitly.
+    async fn handle_api_refresh(&self) -> Response<Body> {
+        let serve_session = Arc::clone(&self.serve_session);
+
+        // ServeSession::refresh blocks on a channel reply from the
+        // ChangeProcessor thread, so run it on the blocking pool to keep
+        // tokio's runtime healthy.
+        let result = tokio::task::spawn_blocking(move || {
+            let start = Instant::now();
+            let outcome = serve_session.refresh();
+            (outcome, start.elapsed())
+        })
+        .await;
+
+        let (refresh_result, elapsed) = match result {
+            Ok(value) => value,
+            Err(err) => {
+                return json(
+                    ErrorResponse::internal_error(format!(
+                        "Refresh task panicked: {}",
+                        err
+                    )),
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                );
+            }
+        };
+
+        let summary = match refresh_result {
+            Ok(summary) => summary,
+            Err(err) => {
+                return json(
+                    ErrorResponse::internal_error(format!("Refresh failed: {}", err)),
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                );
+            }
+        };
+
+        let status = if summary.errors.is_empty() {
+            StatusCode::OK
+        } else {
+            // Partial success: the patch was applied but the snapshot pipeline
+            // raised at least one error. 207 is unusual for non-WebDAV servers
+            // but is the most accurate code; clients should look at `errors`.
+            StatusCode::MULTI_STATUS
+        };
+
+        json(
+            RefreshResponse {
+                session_id: self.serve_session.session_id(),
+                instances_added: summary.instances_added,
+                instances_removed: summary.instances_removed,
+                instances_updated: summary.instances_updated,
+                duration_ms: elapsed.as_millis(),
+                errors: summary.errors,
+            },
+            status,
+        )
     }
 
     /// Open a script with the given ID in the user's default text editor.

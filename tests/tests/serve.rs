@@ -1,11 +1,13 @@
 use std::fs;
+use std::thread;
+use std::time::Duration;
 
 use insta::{assert_snapshot, assert_yaml_snapshot, with_settings};
 use tempfile::tempdir;
 
 use crate::rojo_test::{
     internable::InternAndRedact,
-    serve_util::{run_serve_test, serialize_to_xml_model},
+    serve_util::{run_serve_test, run_serve_test_with_options, serialize_to_xml_model, TestServeOptions},
 };
 
 use librojo::web_api::SocketPacketType;
@@ -656,6 +658,77 @@ fn meshpart_with_id() {
 
         let model = serialize_to_xml_model(&serialize_response, &redactions);
         assert_snapshot!("meshpart_with_id_serialize_model", model);
+    });
+}
+
+/// Verify that `/api/refresh` picks up a file change without the watcher
+/// being involved. We use `--no-watch` so the watcher can't possibly have
+/// reacted to the write; the only thing that updates the tree is the
+/// refresh request.
+#[test]
+fn refresh_no_watch() {
+    let options = TestServeOptions { no_watch: true };
+    run_serve_test_with_options("scripts", options, |session, mut redactions| {
+        let info = session.get_api_rojo().unwrap();
+        let root_id = info.root_instance_id;
+
+        assert!(!info.watch_enabled, "expected watcher to be disabled");
+
+        assert_yaml_snapshot!("refresh_no_watch_info", redactions.redacted_yaml(&info));
+
+        let read_response = session.get_api_read(root_id).unwrap();
+        with_settings!({ sort_maps => true }, {
+            assert_yaml_snapshot!(
+                "refresh_no_watch_all",
+                read_response.intern_and_redact(&mut redactions, root_id)
+            );
+        });
+
+        // Write a new file. Without --no-watch the change processor would
+        // pick this up via FS events; with --no-watch it must not.
+        fs::write(session.path().join("src/foo.lua"), "Updated foo!").unwrap();
+
+        // Give the watcher (if it were running) ample time to react. With
+        // --no-watch the read below must still show the *old* contents.
+        thread::sleep(Duration::from_millis(250));
+
+        // The push: re-snapshot and diff.
+        let summary = session.post_api_refresh().expect("refresh failed");
+        assert!(
+            summary.errors.is_empty(),
+            "expected no errors, got: {:?}",
+            summary.errors
+        );
+        assert!(
+            summary.instances_updated >= 1,
+            "expected at least one update from foo.lua write, got summary: {:?}",
+            summary
+        );
+        assert_eq!(summary.instances_added, 0);
+        assert_eq!(summary.instances_removed, 0);
+
+        // After the refresh, /api/read should reflect the new contents.
+        let read_response = session.get_api_read(root_id).unwrap();
+        with_settings!({ sort_maps => true }, {
+            assert_yaml_snapshot!(
+                "refresh_no_watch_all-2",
+                read_response.intern_and_redact(&mut redactions, root_id)
+            );
+        });
+    });
+}
+
+/// Verify that `/api/refresh` is a no-op (zero changes) when the tree on
+/// disk matches the in-memory tree.
+#[test]
+fn refresh_noop() {
+    let options = TestServeOptions { no_watch: true };
+    run_serve_test_with_options("scripts", options, |session, _redactions| {
+        let summary = session.post_api_refresh().expect("refresh failed");
+        assert!(summary.errors.is_empty());
+        assert_eq!(summary.instances_added, 0);
+        assert_eq!(summary.instances_removed, 0);
+        assert_eq!(summary.instances_updated, 0);
     });
 }
 

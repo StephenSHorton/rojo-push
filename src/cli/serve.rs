@@ -9,7 +9,10 @@ use clap::Parser;
 use memofs::Vfs;
 use termcolor::{BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
-use crate::{serve_session::ServeSession, web::LiveServer};
+use crate::{
+    serve_session::{ServeSession, ServeSessionOptions},
+    web::LiveServer,
+};
 
 use super::{resolve_path, GlobalOptions};
 
@@ -31,6 +34,15 @@ pub struct ServeCommand {
     /// it has none.
     #[clap(long)]
     pub port: Option<u16>,
+
+    /// Disable the filesystem watcher. The project tree is built once at
+    /// startup; subsequent updates must be triggered by `rojo push` or
+    /// `POST /api/refresh`.
+    ///
+    /// Useful when the project lives behind a junction, on a network share,
+    /// or in any other location where filesystem events are unreliable.
+    #[clap(long)]
+    pub no_watch: bool,
 }
 
 impl ServeCommand {
@@ -39,7 +51,14 @@ impl ServeCommand {
 
         let vfs = Vfs::new_default();
 
-        let session = Arc::new(ServeSession::new(vfs, project_path)?);
+        let options = ServeSessionOptions {
+            watch: !self.no_watch,
+        };
+        let session = Arc::new(ServeSession::new_with_options(
+            vfs,
+            project_path,
+            options,
+        )?);
 
         let ip = self
             .address
@@ -53,14 +72,19 @@ impl ServeCommand {
 
         let server = LiveServer::new(session);
 
-        let _ = show_start_message(ip, port, global.color.into());
+        let _ = show_start_message(ip, port, self.no_watch, global.color.into());
         server.start((ip, port).into());
 
         Ok(())
     }
 }
 
-fn show_start_message(bind_address: IpAddr, port: u16, color: ColorChoice) -> io::Result<()> {
+fn show_start_message(
+    bind_address: IpAddr,
+    port: u16,
+    no_watch: bool,
+    color: ColorChoice,
+) -> io::Result<()> {
     let mut green = ColorSpec::new();
     green.set_fg(Some(Color::Green)).set_bold(true);
 
@@ -94,6 +118,21 @@ fn show_start_message(bind_address: IpAddr, port: u16, color: ColorChoice) -> io
 
     buffer.set_color(&ColorSpec::new())?;
     writeln!(&mut buffer, " in your browser for more information.")?;
+
+    if no_watch {
+        writeln!(&mut buffer)?;
+        buffer.set_color(&ColorSpec::new())?;
+        write!(&mut buffer, "Filesystem watcher: ")?;
+        let mut yellow = ColorSpec::new();
+        yellow.set_fg(Some(Color::Yellow)).set_bold(true);
+        buffer.set_color(&yellow)?;
+        writeln!(&mut buffer, "disabled (--no-watch)")?;
+        buffer.set_color(&ColorSpec::new())?;
+        writeln!(
+            &mut buffer,
+            "Trigger updates with `rojo push` or POST /api/refresh."
+        )?;
+    }
 
     writer.print(&buffer)?;
 

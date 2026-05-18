@@ -165,6 +165,20 @@ pub struct ServerInfoResponse {
     pub game_id: Option<u64>,
     pub place_id: Option<u64>,
     pub root_instance_id: Ref,
+    /// Whether the filesystem watcher is enabled. When `false`, updates only
+    /// flow on explicit `POST /api/refresh` calls. Optional for protocol
+    /// back-compat: older servers omit this field and older plugins ignore
+    /// it.
+    #[serde(default = "default_watch_enabled", skip_serializing_if = "is_true")]
+    pub watch_enabled: bool,
+}
+
+fn default_watch_enabled() -> bool {
+    true
+}
+
+fn is_true(value: &bool) -> bool {
+    *value
 }
 
 /// Response body from /api/read/{id}
@@ -236,6 +250,22 @@ pub struct SocketPacket<'a> {
 #[serde(rename_all = "camelCase")]
 pub struct OpenResponse {
     pub session_id: SessionId,
+}
+
+/// Response body from `POST /api/refresh`.
+///
+/// Reports the patch that was applied to the in-memory tree as a result of
+/// re-snapshotting the project from disk. Unlike the rest of `/api/*`, this
+/// route always returns JSON; it is intended for CLI/scripting consumption.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefreshResponse {
+    pub session_id: SessionId,
+    pub instances_added: usize,
+    pub instances_removed: usize,
+    pub instances_updated: usize,
+    pub duration_ms: u128,
+    pub errors: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

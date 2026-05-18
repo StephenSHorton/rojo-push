@@ -16,6 +16,19 @@ use crate::{
     snapshot_middleware::{snapshot_from_vfs, snapshot_project_node},
 };
 
+/// Summary returned to a caller of [`ChangeProcessor::refresh`].
+#[derive(Debug, Default, Clone)]
+pub struct RefreshSummary {
+    pub instances_added: usize,
+    pub instances_removed: usize,
+    pub instances_updated: usize,
+    pub errors: Vec<String>,
+}
+
+/// Reply channel used by the refresh request handler to send a summary back to
+/// the caller.
+pub type RefreshReply = Sender<RefreshSummary>;
+
 /// Processes file change events, updates the DOM, and sends those updates
 /// through a channel for other stuff to consume.
 ///
@@ -51,6 +64,7 @@ impl ChangeProcessor {
         vfs: Arc<Vfs>,
         message_queue: Arc<MessageQueue<AppliedPatchSet>>,
         tree_mutation_receiver: Receiver<PatchSet>,
+        refresh_request_receiver: Receiver<RefreshReply>,
     ) -> Self {
         let (shutdown_sender, shutdown_receiver) = crossbeam_channel::bounded(1);
         let vfs_receiver = vfs.event_receiver();
@@ -72,6 +86,9 @@ impl ChangeProcessor {
                         },
                         recv(tree_mutation_receiver) -> patch_set => {
                             task.handle_tree_event(patch_set?);
+                        },
+                        recv(refresh_request_receiver) -> reply => {
+                            task.handle_refresh_request(reply?);
                         },
                         recv(shutdown_receiver) -> _ => {
                             log::trace!("ChangeProcessor shutdown signal received...");
@@ -147,9 +164,15 @@ impl JobThreadContext {
         };
 
         for id in affected_ids {
-            if let Some(patch) = compute_and_apply_changes(&mut tree, &self.vfs, id) {
-                if !patch.is_empty() {
-                    applied_patches.push(patch);
+            match compute_and_apply_changes(&mut tree, &self.vfs, id) {
+                Ok(Some(patch)) => {
+                    if !patch.is_empty() {
+                        applied_patches.push(patch);
+                    }
+                }
+                Ok(None) => {}
+                Err(err) => {
+                    log::error!("Snapshot error while applying patches: {}", err);
                 }
             }
         }
@@ -188,6 +211,46 @@ impl JobThreadContext {
         // Notify anyone listening to the message queue about the changes we
         // just made.
         self.message_queue.push_messages(&applied_patches);
+    }
+
+    /// Re-snapshots the entire project tree from disk and applies any diff to
+    /// the in-memory tree, pushing the result through the message queue so
+    /// connected plugins receive it.
+    ///
+    /// This is the manual-push equivalent of a watcher-triggered refresh.
+    fn handle_refresh_request(&self, reply: RefreshReply) {
+        log::trace!("Refresh request received");
+
+        let mut summary = RefreshSummary::default();
+
+        let applied_patch = {
+            let mut tree = self.tree.lock().unwrap();
+            let root_id = tree.get_root_id();
+
+            match compute_and_apply_changes(&mut tree, &self.vfs, root_id) {
+                Ok(Some(patch)) => Some(patch),
+                Ok(None) => None,
+                Err(err) => {
+                    log::error!("Refresh failed: {}", err);
+                    summary.errors.push(err);
+                    None
+                }
+            }
+        };
+
+        if let Some(patch) = applied_patch {
+            summary.instances_added += patch.added.len();
+            summary.instances_removed += patch.removed.len();
+            summary.instances_updated += patch.updated.len();
+
+            if !patch.is_empty() {
+                self.message_queue.push_messages(&[patch]);
+            }
+        }
+
+        // If the caller dropped the receiver we just ignore the error; the
+        // work has already been applied to the tree, so it isn't wasted.
+        let _ = reply.send(summary);
     }
 
     fn handle_tree_event(&self, patch_set: PatchSet) {
@@ -280,7 +343,18 @@ impl JobThreadContext {
     }
 }
 
-fn compute_and_apply_changes(tree: &mut RojoTree, vfs: &Vfs, id: Ref) -> Option<AppliedPatchSet> {
+/// Recomputes and applies changes for the given instance.
+///
+/// Returns:
+/// * `Ok(Some(patch))` — a patch (possibly empty) was applied.
+/// * `Ok(None)` — the instance had no instigating source (a bug we log about).
+/// * `Err(message)` — snapshotting the instigating source failed; the tree was
+///   not modified.
+fn compute_and_apply_changes(
+    tree: &mut RojoTree,
+    vfs: &Vfs,
+    id: Ref,
+) -> Result<Option<AppliedPatchSet>, String> {
     let metadata = tree
         .get_metadata(id)
         .expect("metadata missing for instance present in tree");
@@ -293,7 +367,7 @@ fn compute_and_apply_changes(tree: &mut RojoTree, vfs: &Vfs, id: Ref) -> Option<
                 id
             );
             log::error!("This is a bug. Please file an issue!");
-            return None;
+            return Ok(None);
         }
     };
 
@@ -309,8 +383,9 @@ fn compute_and_apply_changes(tree: &mut RojoTree, vfs: &Vfs, id: Ref) -> Option<
                 let snapshot = match snapshot_from_vfs(&metadata.context, vfs, path) {
                     Ok(snapshot) => snapshot,
                     Err(err) => {
-                        log::error!("Snapshot error: {:?}", err);
-                        return None;
+                        let msg = format!("Snapshot error at {}: {}", path.display(), err);
+                        log::error!("{}", msg);
+                        return Err(msg);
                     }
                 };
 
@@ -330,8 +405,13 @@ fn compute_and_apply_changes(tree: &mut RojoTree, vfs: &Vfs, id: Ref) -> Option<
                 apply_patch_set(tree, patch_set)
             }
             Err(err) => {
-                log::error!("Error processing filesystem change: {:?}", err);
-                return None;
+                let msg = format!(
+                    "Error reading filesystem metadata for {}: {}",
+                    path.display(),
+                    err
+                );
+                log::error!("{}", msg);
+                return Err(msg);
             }
         },
 
@@ -357,8 +437,9 @@ fn compute_and_apply_changes(tree: &mut RojoTree, vfs: &Vfs, id: Ref) -> Option<
             let snapshot = match snapshot_result {
                 Ok(snapshot) => snapshot,
                 Err(err) => {
-                    log::error!("{:?}", err);
-                    return None;
+                    let msg = format!("Snapshot error for project node {}: {}", name, err);
+                    log::error!("{}", msg);
+                    return Err(msg);
                 }
             };
 
@@ -367,5 +448,5 @@ fn compute_and_apply_changes(tree: &mut RojoTree, vfs: &Vfs, id: Ref) -> Option<
         }
     };
 
-    Some(applied_patch_set)
+    Ok(Some(applied_patch_set))
 }
