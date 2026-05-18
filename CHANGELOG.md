@@ -29,7 +29,10 @@ Making a new release? Simply add the new header with the version and date undern
 ```
 -->
 
-## Unreleased — `rojo-push` fork
+## [7.7.0-push.1] (May 18th, 2026) — `rojo-push` fork
+
+[7.7.0-push.1]: https://github.com/StephenSHorton/rojo-push/releases/tag/v7.7.0-push.1
+
 
 This fork adds a manual-push sync mode for environments where Rojo's filesystem
 watcher is unreliable (Windows junctions, network shares, cross-directory project
