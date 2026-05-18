@@ -7,6 +7,33 @@ propagate), and the same problem affects network shares and some cross-directory
 project layouts. Upstream Rojo's default behavior is unchanged; everything new
 is opt-in.
 
+## First-time setup
+
+Install the Studio plugin from the fork:
+
+```
+rojo plugin install
+```
+
+If you already have any other Rojo plugin installed (e.g. from the Marketplace,
+a previous install of upstream Rojo, or another fork), `rojo plugin install`
+will warn you and list the offending files. Studio loads every `*.rbxm` in
+its plugins folder, so two Rojo plugins side-by-side both subscribe to the
+same serve session — the older one will fail to talk to the API (usually with
+a `Can't parse JSON` error, because newer servers return msgpack from
+`/api/rojo` and older plugins still call `Http.Response.json`).
+
+Two ways to resolve the conflict:
+
+```
+# Have rojo-push rename the conflicting files to <name>.disabled:
+rojo plugin install --disable-conflicts
+
+# Or remove them by hand via Plugins → Manage Plugins in Studio.
+```
+
+Restart Studio after either fix so the change takes effect.
+
 ## Workflow
 
 Start a serve session with the watcher disabled. The tree is built once at
