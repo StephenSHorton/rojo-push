@@ -63,6 +63,25 @@ fn main() -> Result<(), anyhow::Error> {
         "plugin version does not match Cargo version"
     );
 
+    // Guard against building with un-initialised git submodules. The Lua
+    // dependencies under plugin/Packages (Roact, Promise, etc.) live in
+    // submodules. If they aren't checked out, the resulting plugin .rbxm
+    // will be wired up correctly on the surface but every `require(Packages.X)`
+    // will fail at runtime — and the only way to discover this is to load
+    // the plugin in Studio and read the log.
+    //
+    // We probe Roact specifically because every code path through the plugin
+    // exercises it; if Roact is missing, the plugin is unusable.
+    let roact_marker = plugin_dir.join("Packages").join("Roact").join("src").join("init.lua");
+    if !roact_marker.exists() {
+        anyhow::bail!(
+            "plugin/Packages/Roact appears empty (missing {}).\n\
+             Run `git submodule update --init --recursive` from the repo root \
+             before building.",
+            roact_marker.display(),
+        );
+    }
+
     let template_snapshot = snapshot_from_fs_path(&templates_dir)?;
 
     let plugin_snapshot = VfsSnapshot::dir(hashmap! {

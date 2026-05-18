@@ -29,6 +29,25 @@ Making a new release? Simply add the new header with the version and date undern
 ```
 -->
 
+## [7.7.0-push.3] (May 18th, 2026) — `rojo-push` fork
+
+* **Critical fix:** rebuild the plugin .rbxm with the `plugin/Packages/*` git
+  submodules populated. Both 7.7.0-push.1 and 7.7.0-push.2 shipped a plugin
+  whose `Packages.Roact`, `Packages.Promise`, etc. were empty folders — Studio
+  loaded the plugin file and ran `init.server.lua`, which immediately errored
+  on `require(Packages.Roact)` (`Attempted to call require with invalid
+  argument(s).`). No toolbar, no Connect button, plugin silently inert. Symptoms
+  in Studio's log:
+  ```
+  [FLog::Error] Error: Attempted to call require with invalid argument(s).
+  Stack: Script 'user_RojoManagedPlugin.rbxm.Rojo.Plugin', Line 9
+  ```
+* `build.rs` now bails with a clear message if `plugin/Packages/Roact/src/init.lua`
+  is missing, so future builders who forget `git submodule update --init --recursive`
+  get a build-time error instead of a silently-broken plugin.
+
+[7.7.0-push.3]: https://github.com/StephenSHorton/rojo-push/releases/tag/v7.7.0-push.3
+
 ## [7.7.0-push.2] (May 18th, 2026) — `rojo-push` fork
 
 * `rojo plugin install` now detects other Rojo plugin files in Studio's plugins
