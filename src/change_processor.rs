@@ -241,7 +241,23 @@ impl JobThreadContext {
         if let Some(patch) = applied_patch {
             summary.instances_added += patch.added.len();
             summary.instances_removed += patch.removed.len();
-            summary.instances_updated += patch.updated.len();
+            // Re-snapshotting the entire root produces metadata-only
+            // diffs for many instances even when their content is
+            // unchanged (a quirk of the patch_compute path comparing
+            // structural InstanceMetadata, which contains non-stable
+            // fields like relevant_paths order across snapshots). Those
+            // diffs flow to the plugin as no-ops, but we report only
+            // content-changing updates in the summary to keep the
+            // numbers meaningful.
+            summary.instances_updated += patch
+                .updated
+                .iter()
+                .filter(|u| {
+                    !u.changed_properties.is_empty()
+                        || u.changed_name.is_some()
+                        || u.changed_class_name.is_some()
+                })
+                .count();
 
             if !patch.is_empty() {
                 self.message_queue.push_messages(&[patch]);

@@ -145,6 +145,21 @@ If upstream touches any of those (especially `change_processor.rs` or
 `serve_session.rs`), expect a merge conflict and review carefully. The rest of
 the codebase is untouched.
 
+## Known quirks
+
+- **`instancesUpdated` counts only content-changing updates.** When the refresh
+  re-snapshots the entire root, the patch_compute path produces metadata-only
+  diffs for many instances even when their content is unchanged — most likely
+  because `InstanceMetadata` contains a `Vec<PathBuf>` (`relevant_paths`) whose
+  order isn't stable across snapshots, or an `InstigatingSource::ProjectNode`
+  embedding a nested `ProjectNode` that isn't stably equal. These no-op patches
+  still flow to the Studio plugin through the message queue (consistent with
+  the upstream watcher path), but the summary excludes them so the count
+  reflects what the user actually changed on disk. If you ever see
+  `instancesUpdated > 0` after a refresh you didn't expect, the build wrote
+  files you weren't expecting — not a false positive. Tracking this as a
+  potential upstream fix (TODO).
+
 ## What this fork does NOT change
 
 - The binary is still named `rojo`. Existing Rokit configs, VS Code Rojo
