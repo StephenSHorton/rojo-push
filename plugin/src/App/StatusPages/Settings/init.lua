@@ -193,7 +193,7 @@ function SettingsPage:render()
 			CheckForUpdates = e(Setting, {
 				id = "checkForUpdates",
 				name = "Check For Updates",
-				description = "Notify about newer compatible Rojo releases",
+				description = "Notify when a newer upstream Rojo should be pulled into this fork",
 				locked = Version.isApiBlocked(),
 				lockedTooltip = "(HTTP requests to api.github.com are blocked, Rojo cannot fetch what the latest version is.)",
 				transparency = self.props.transparency,
@@ -203,7 +203,7 @@ function SettingsPage:render()
 			CheckForPreleases = e(Setting, {
 				id = "checkForPrereleases",
 				name = "Include Prerelease Updates",
-				description = "Include prereleases when checking for updates",
+				description = "Include upstream prereleases when checking what to pull into this fork",
 				transparency = self.props.transparency,
 				layoutOrder = layoutIncrement(),
 				visible = if string.find(debug.traceback(), "\n[^\n]-user_.-$") == nil

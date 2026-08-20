@@ -29,6 +29,27 @@ end
 local Version = {}
 
 --[[
+	Compares only major.minor.patch, ignoring prerelease / fork suffixes.
+
+	rojo-push versions look like 7.7.0-push.4. Semver treats that as older than
+	official 7.7.0, which made the plugin nag to "upgrade" to the release we
+	already merged. Use this when asking "is upstream actually ahead of us?"
+]]
+function Version.compareBase(a, b)
+	local major = compare(a[1], b[1])
+	if major ~= 0 then
+		return major
+	end
+
+	local minor = compare(a[2] or 0, b[2] or 0)
+	if minor ~= 0 then
+		return minor
+	end
+
+	return compare(a[3] or 0, b[3] or 0)
+end
+
+--[[
 	Compares two versions of the form {major, minor, revision}.
 
 	If a is newer than b, 1.
@@ -189,8 +210,9 @@ function Version.retrieveLatestCompatible(options: {
 		}
 	end
 
-	-- Don't return anything if the latest found is not newer than the current version
-	if latestCompatible == nil or Version.compare(latestCompatible.version, options.version) <= 0 then
+	-- Don't nag if upstream's major.minor.patch isn't actually ahead of us.
+	-- Fork tags (7.7.0-push.4) must not look older than official 7.7.0.
+	if latestCompatible == nil or Version.compareBase(latestCompatible.version, options.version) <= 0 then
 		-- Cache as nil so we don't try again for a day
 		Version._cachedLatestCompatible = {
 			value = nil,
@@ -224,7 +246,7 @@ function Version.getUpdateMessage(): string?
 	end
 
 	return string.format(
-		"A newer compatible version of Rojo, %s, was published %s! Go to the Rojo releases page to learn more.",
+		"A newer upstream Rojo, %s, was published %s. Pull it into rojo-push (merge rojo-rbx/rojo) to stay current.",
 		Version.display(latestCompatibleVersion.version),
 		timeUtil.elapsedToText(DateTime.now().UnixTimestamp - latestCompatibleVersion.publishedUnixTimestamp)
 	)

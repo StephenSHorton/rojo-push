@@ -45,6 +45,15 @@ return function()
 		expect(Version.compare({ 1, 0, 0, "-alpha" }, { 1, 0, 0, "-beta" })).to.equal(0)
 	end)
 
+	it("should ignore fork suffixes when comparing against official releases", function()
+		expect(Version.compareBase({ 7, 7, 0, "-push.4" }, { 7, 7, 0 })).to.equal(0)
+		expect(Version.compareBase({ 7, 7, 0 }, { 7, 7, 0, "-push.4" })).to.equal(0)
+		expect(Version.compareBase({ 7, 8, 0 }, { 7, 7, 0, "-push.4" })).to.equal(1)
+		expect(Version.compareBase({ 7, 7, 0, "-push.4" }, { 7, 8, 0 })).to.equal(-1)
+		-- Full compare still treats -push.4 as a prerelease of 7.7.0
+		expect(Version.compare({ 7, 7, 0, "-push.4" }, { 7, 7, 0 })).to.equal(-1)
+	end)
+
 	it("should parse version from strings", function()
 		local a = Version.parse("v1.0.0")
 		expect(a).to.be.ok()
