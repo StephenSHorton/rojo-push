@@ -194,3 +194,5 @@ the codebase is untouched.
 - Default `rojo serve` (no `--no-watch`) behaves exactly as upstream.
 - The plugin and its protocol are unchanged.
 - All upstream tests still pass.
+
+Upstream contribution policy lives in [`AGENTS.md`](AGENTS.md).

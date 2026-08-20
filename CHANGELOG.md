@@ -29,6 +29,27 @@ Making a new release? Simply add the new header with the version and date undern
 ```
 -->
 
+## Unreleased
+
+## [7.7.0-push.4] (August 20th, 2026) — `rojo-push` fork
+
+Merged [upstream `v7.7.0`](https://github.com/rojo-rbx/rojo/releases/tag/v7.7.0)
+and the post-release Windows path / plugin-update commits on `rojo-rbx/rojo`
+master. Push-mode (`--no-watch`, `rojo push`, `POST /api/refresh`) is unchanged.
+
+Notable upstream that this fork now includes:
+
+* Official Rojo 7.7.0 (hydration matching, glob negation, Host/Origin
+  validation, graceful serve errors, `init.plugin.lua`, syncback fixes).
+* Fixed `rojo serve` silently stopping file-change sync on Windows when the
+  project path was a verbatim (`\\?\`) path. ([#1290])
+* Fixed `$path` values outside the project folder failing `syncRule` matching
+  on Windows. ([#1290])
+* Fixed `rojo sourcemap --absolute` emitting verbatim Windows paths. ([#1290])
+* Plugin disables `Check for Updates` if `api.github.com` is blocked. ([#1297])
+
+[7.7.0-push.4]: https://github.com/StephenSHorton/rojo-push/releases/tag/v7.7.0-push.4
+
 ## [7.7.0-push.3] (May 18th, 2026) — `rojo-push` fork
 
 * **Critical fix:** rebuild the plugin .rbxm with the `plugin/Packages/*` git
@@ -78,7 +99,10 @@ layouts). The default behavior of upstream Rojo is unchanged.
 * The Studio plugin requires no changes: refresh-triggered patches flow through
   the existing message queue.
 
-## Unreleased
+[#1290]: https://github.com/rojo-rbx/rojo/pull/1290
+[#1297]: https://github.com/rojo-rbx/rojo/pull/1297
+
+## [7.7.0] (July 1st, 2026)
 
 * `inf` and `nan` values in properties are now synced ([#1176])
 * Fixed a bug caused by having reference properties (such as `ObjectValue.Value`) that point to an Instance not included in syncback. ([#1179])
@@ -88,6 +112,14 @@ layouts). The default behavior of upstream Rojo is unchanged.
 * Fixed a bug where the notification timeout thread would fail to cancel on unmount ([#1211])
 * Added a "Forget" option to the sync reminder notification to avoid being reminded for that place in the future ([#1215])
 * Improves relative path calculation for sourcemap generation to avoid issues with Windows UNC paths. ([#1217])
+* Fixed missing support for init.plugin.lua and init.plugin.luau. ([#1252])
+* Add support for gitignore-style negation in `globIgnorePaths` and syncback's `ignorePaths` ([#1256])
+* Fixed the sync fallback scrambling sibling order; replacements are now re-parented ancestors-first and in their original child order. ([#1265])
+* Instances that share a name and class are now robustly matched on resync by comparing their properties, instead of relying on child order alone. ([#1266])
+* Rojo now reports a clear error instead of panicking in several cases, including when the `serve` port is already in use, when a synced file is read-only or locked, when the filesystem watcher can't be created, and when the working directory is inaccessible. ([#1267])
+* Fixed `/api/serialize` returning success when a requested instance ID is missing from the serve session tree. ([#1272])
+* `rojo serve` now validates the `Host`/`Origin` headers to protect the local/private server against DNS rebinding, gates `/api/open` to local clients, and warns when bound to a network-reachable address. The accepted hosts can be extended with the `--allowed-hosts` option or a project's `serveAllowedHosts` field, for example to reach a network-exposed server by hostname. ([#1270])
+* Fixed syncback not removing stale `$properties` entries when Studio resets a property to its engine default. ([#1244])
 
 [#1176]: https://github.com/rojo-rbx/rojo/pull/1176
 [#1179]: https://github.com/rojo-rbx/rojo/pull/1179
@@ -97,6 +129,14 @@ layouts). The default behavior of upstream Rojo is unchanged.
 [#1211]: https://github.com/rojo-rbx/rojo/pull/1211
 [#1215]: https://github.com/rojo-rbx/rojo/pull/1215
 [#1217]: https://github.com/rojo-rbx/rojo/pull/1217
+[#1252]: https://github.com/rojo-rbx/rojo/pull/1252
+[#1256]: https://github.com/rojo-rbx/rojo/pull/1256
+[#1265]: https://github.com/rojo-rbx/rojo/pull/1265
+[#1266]: https://github.com/rojo-rbx/rojo/pull/1266
+[#1267]: https://github.com/rojo-rbx/rojo/pull/1267
+[#1272]: https://github.com/rojo-rbx/rojo/pull/1272
+[#1270]: https://github.com/rojo-rbx/rojo/pull/1270
+[#1244]: https://github.com/rojo-rbx/rojo/pull/1244
 
 ## [7.7.0-rc.1] (November 27th, 2025)
 
