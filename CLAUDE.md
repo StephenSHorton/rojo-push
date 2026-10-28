@@ -139,6 +139,28 @@ The change in shape, not in volume:
    `/api/socket/{cursor}` long-poll, so refresh-triggered patches flow through
    the existing plugin protocol without any plugin-side changes.
 
+## Checks (run locally - no CI)
+
+This fork has no CI on PRs or pushes (saves GitHub Actions minutes; the
+upstream `ci.yml` and `changelog.yml` workflows were removed here, only the
+tag-triggered `release.yml` remains). Before opening/merging a PR or pushing
+to `master`, run these locally and make sure they pass:
+
+```
+git submodule update --init --recursive
+cargo build --locked
+cargo test --locked
+cargo +1.88.0 build --locked   # MSRV check (rustup toolchain install 1.88.0)
+cargo fmt -- --check
+cargo clippy
+stylua --check plugin/src      # tools via `rokit install`
+selene plugin/src
+```
+
+Upstream CI ran build + test on Linux, Windows and macOS (x64 and ARM); run
+them on whatever machine you have. If the change adds a feature or fixes a
+bug, add a `CHANGELOG.md` entry (the removed changelog check enforced this).
+
 ## Pulling from upstream
 
 The upstream remote is kept as `upstream`:
